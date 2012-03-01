@@ -5,5 +5,4 @@
   {registered, []},
   {mod, {rabbit_events_app, []}},
   {env, []},
-  {applications, [kernel, stdlib, rabbit]}]}.
-
+  {applications, [kernel, stdlib]}]}.
