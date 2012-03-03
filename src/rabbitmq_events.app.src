@@ -4,5 +4,11 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_events_app, []}},
-  {env, []},
+  {env, [  {host         , "localhost"}
+         , {username     , <<"guest">>}
+         , {password     , <<"guest">>}
+         , {virtual_host , <<"/">>}
+         , {exchange     , <<"rabbitevents">>}
+         , {debug        , false}
+        ]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.

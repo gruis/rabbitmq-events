@@ -10,28 +10,34 @@ add_handler() ->
     gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
 
 init([]) ->
-    {ok, []}.
+  [ ok=store_config(Key) || Key <- [host, username, password, virtual_host, exchange, debug] ],
+  {ok, []}.
+
+store_config(Key) ->
+  {ok, Value} = application:get_env(rabbitmq_events, Key),
+  put(Key, Value),
+  ok.
 
 handle_call(_Request, State) ->
-  rabbit_log:info("[events] got state that isn't understood ~p.~n", [State]),
+  log("[events] got state that isn't understood ~p.~n", [State]),
   {ok, not_understood, State}.
 
 handle_info(_Info, State) ->
-  rabbit_log:info("[events] caught an info ~p for state ~p.~n", [_Info, State]),
+  log("[events] caught an info ~p for state ~p.~n", [_Info, State]),
   {ok, State}.
 
 terminate(_Arg, _State) ->
-  rabbit_log:info("[events] terminating.~n", []),
+  log("[events] terminating.~n", []),
   ok.
 
 code_change(_OldVsn, State, _Extra) ->
-  rabbit_log:info("[events] code change called.~n", []),
+  log("[events] code change called.~n", []),
   {ok, State}.
 
 
 %%------------------------------------------------------------------------------------------------------------
 handle_event({event, Type, [{pid, Pid}|_Event], _}, _State) when Pid == self() ->
-  rabbit_log:info("[events:~p] caught my own event.~n", [Type]);
+  log("[events:~p] caught my own event.~n", [Type]);
 
 %% Receive a proplist from the internal event stream, sanitize it and preprocess it for the 
 %% JSON encoder then expose it via the rabbitevents fanout.
@@ -42,26 +48,40 @@ handle_event({event, Type, Event, _}, State) ->
   Json = mochijson2:encode(Filtered),
 
   Channel    = get_channel(),
-  %rabbit_log:info("publishing ~p on rabbitevents ~p.~n", [list_to_binary(Json), Type]),
+  log("publishing ~p on ~p.~n", [list_to_binary(Json), get(exchange)]),
   Properties   = #'P_basic'{content_type  = <<"application/json">>, 
                             delivery_mode = 1},
-  BasicPublish = #'basic.publish'{exchange    = <<"rabbitevents">>},
+  BasicPublish = #'basic.publish'{exchange    = get(exchange)},
   Content      = #amqp_msg{props   = Properties,
                            payload = list_to_binary(Json)},
   amqp_channel:cast(Channel, BasicPublish, Content),
   {ok, State}.
 
 %%------------------------------------------------------------------------------------------------------------
+log(Msg, Values) ->
+  case get(debug) of
+    undefined ->
+      rabbit_log:info(Msg, Values);
+    true ->
+      rabbit_log:info(Msg, Values);
+    _ -> nothing
+  end.
+
 log_event(Type, Event) ->
-  %rabbit_log:info("[events:~p] ~p.~n", [Type, Event]).
+  log("[events:~p] ~p.~n", [Type, Event]),
   true.
 
 get_channel() ->
   case get(channel) of
     undefined ->
-      {ok, Connection} = amqp_connection:start(#amqp_params_network{host = "localhost"}),
+      {ok, Connection} = amqp_connection:start(#amqp_params_network{
+                                                  host         = get(host)
+                                                , username     = get(username)
+                                                , password     = get(password)
+                                                , virtual_host = get(virtual_host) 
+                                               }),
       {ok, Channel}    = amqp_connection:open_channel(Connection),
-      amqp_channel:call(Channel, #'exchange.declare'{exchange = <<"rabbitevents">>,
+      amqp_channel:call(Channel, #'exchange.declare'{exchange = get(exchange),
                                                      type     = <<"fanout">>}),
       put(channel, Channel),
       Channel;
