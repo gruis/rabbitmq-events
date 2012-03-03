@@ -30,6 +30,7 @@ loop(Channel) ->
     receive
         {#'basic.deliver'{}, #amqp_msg{payload = Body}} ->
             io:format(" got an event", []),
-            io:format(" [x] ~p~n", [Body]),
+            Json = mochijson2:decode(Body),
+            io:format(" [x] ~p~n", [Json]),
             loop(Channel)
     end.

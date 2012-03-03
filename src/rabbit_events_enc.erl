@@ -5,7 +5,7 @@
 %%      with binaries as strings, arrays as lists (without an {array, _})
 %%      wrapper and it only knows how to decode UTF-8 (and ASCII).
 
--module(mochijson2).
+-module(rabbit_events_enc).
 -author('bob@mochimedia.com').
 -export([encoder/1, encode/1]).
 -export([decoder/1, decode/1]).

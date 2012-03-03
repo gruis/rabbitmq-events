@@ -45,7 +45,7 @@ handle_event({event, Type, Event, _}, State) ->
   log_event(Type, Event),
   Preped   = [prepro(C) || C <- [{event, Type} | Event]],
   Filtered = {struct, [C || C <- Preped, C =/= null]},
-  Json = mochijson2:encode(Filtered),
+  Json = rabbit_events_enc:encode(Filtered),
 
   Channel    = get_channel(),
   log("publishing ~p on ~p.~n", [list_to_binary(Json), get(exchange)]),
