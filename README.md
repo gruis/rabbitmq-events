@@ -13,15 +13,15 @@ variable in the rabbitmq.config, which is usually in ``/etc/rabbitmq/``.
 
 ## Example
 
-  [{rabbitmq_events, [ 
-           {host         , "localhost"}
-         , {username     , <<"guest">>}
-         , {password     , <<"guest">>}
-         , {virtual_host , <<"/">>}
-         , {exchange     , <<"rabbitevents">>}
-         , {debug        , false}
-    ]}
-  ].
+    [{rabbitmq_events, [ 
+             {host         , "localhost"}
+           , {username     , <<"guest">>}
+           , {password     , <<"guest">>}
+           , {virtual_host , <<"/">>}
+           , {exchange     , <<"rabbitevents">>}
+           , {debug        , false}
+      ]}
+    ].
 
 
 # Events Exposed
