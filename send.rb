@@ -1,4 +1,8 @@
 #!/usr/bin/env ruby -wW1
+
+# send.rb is a simple script to force rabbitmq to generate internal
+# events for testing.
+
 require "amqp"
 
 EventMachine.run do

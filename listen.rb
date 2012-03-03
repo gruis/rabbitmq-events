@@ -1,4 +1,8 @@
 #!/usr/bin/env ruby -wW1
+
+# listen.rb is a simple script that receives rabbit events as JSON
+# blobs, decodes and pretty prints them on teh console.
+
 require 'amqp'
 require 'json'
 
@@ -15,6 +19,7 @@ EventMachine.run do
     else
       puts "        headers: #{headers.attributes}"
       puts "        payload: #{payload.inspect}"
-    end # headers[:contente_type]
-  end # headers, payload
+    end
+  end
+
 end

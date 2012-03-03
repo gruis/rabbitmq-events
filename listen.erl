@@ -1,6 +1,9 @@
 #!/usr/bin/env escript 
 %%! -pz ./amqp_client ./rabbit_common ./amqp_client/ebin ./rabbit_common/ebin
 
+%% listen.erl is simple script that receives rabbit events as JSON
+%% blobs, decodes and prints them.
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 main(_) ->
