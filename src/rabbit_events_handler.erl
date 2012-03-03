@@ -1,4 +1,3 @@
-
 -module(rabbit_events_handler).
 -behaviour(gen_event).
 -export([add_handler/0]).
@@ -7,7 +6,6 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 add_handler() ->
-    %put(connection, Connection),
     gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
 
 init([]) ->
@@ -60,9 +58,12 @@ prepro({peer_address, Addr}) when is_tuple(Addr) ->
   {peer_address, tuple_to_list(Addr)};
 
 prepro({client_properties, Props}) ->
-  null;
-%  {client_properties, {struct, [prepro(P) || P <- Props]}};
+  {client_properties, {struct, [prepro(P) || P <- Props]}};
+prepro({Key, table, Table}) when is_list(Table) ->
+  {Key, {struct, [prepro(E) || E <- Table]}};
 prepro({Key, longstr, Value}) when is_binary(Key), is_binary(Value) ->
+  {Key, Value};
+prepro({Key, bool, Value}) when is_binary(Key), is_atom(Value) ->
   {Key, Value};
 
 % TODO handle tuples with arbitrary even number contents; assume key/value pairs
@@ -88,9 +89,9 @@ handle_event({event, Type, [{pid, Pid}|_Event], _}, _State) when Pid == self() -
   rabbit_log:info("[events:~p] caught my own event.~n", [Type]);
 
 %% Receive a proplist from the internal event stream, sanitize it and preprocess it for the 
-%% JSON encoder then expose it via a known exchange..
-handle_event({event, Type, [{pid, Pid}|Event], _}, State) ->
-  rabbit_log:info("[~p events:~p] caught an event ~p from ~p in state ~p.~n", [self(), Type, Event, Pid, State]),
+%% JSON encoder then expose it via the rabbitevents fanout.
+handle_event({event, Type, Event, _}, State) ->
+  rabbit_log:info("[~p events:~p] caught an event ~p in state ~p.~n", [self(), Type, Event, State]),
   log_event(Type, Event),
   Preped   = [prepro(C) || C <- [{event, Type} | Event]],
   Filtered = {struct, [C || C <- Preped, C =/= null]},
@@ -105,19 +106,5 @@ handle_event({event, Type, [{pid, Pid}|Event], _}, State) ->
   Content      = #amqp_msg{props   = Properties,
                            payload = list_to_binary(Json)},
   amqp_channel:cast(Channel, BasicPublish, Content),
-
-% amqp_channel:cast(Channel,
-%                   #'basic.publish'{exchange    = <<"rabbitevent">>},
-%                   #amqp_msg{payload = list_to_binary(EEvent)}),
-
-  {ok, State};
-
-handle_event({event, Type, Event, _}, State) ->
-  rabbit_log:info("[events:~p] caught an event ~p in state ~p.~n", [Type, Event, State]),
-  log_event(Type, Event),
-  MEvent = [prepro(C) || C <- [{event, Type} | Event]],
-  EEvent = mochijson2:encode({struct, [C || C <- MEvent, C =/= null]}),
-  rabbit_log:info(EEvent),
   {ok, State}.
-
 %%------------------------------------------------------------------------------------------------------------

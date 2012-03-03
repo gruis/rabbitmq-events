@@ -1,8 +1,8 @@
 {application, rabbitmq_events,
  [{description, "RabbitMQ Event Notifications"},
-  {vsn, "%%VSN%%"},
+  {vsn, "0.01"},
   {modules, []},
   {registered, []},
   {mod, {rabbit_events_app, []}},
   {env, []},
-  {applications, [kernel, stdlib]}]}.
+  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
