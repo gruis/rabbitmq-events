@@ -3,6 +3,7 @@
 -export([add_handler/0]).
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 add_handler() ->
@@ -29,6 +30,32 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %%------------------------------------------------------------------------------------------------------------
+handle_event({event, Type, [{pid, Pid}|_Event], _}, _State) when Pid == self() ->
+  rabbit_log:info("[events:~p] caught my own event.~n", [Type]);
+
+%% Receive a proplist from the internal event stream, sanitize it and preprocess it for the 
+%% JSON encoder then expose it via the rabbitevents fanout.
+handle_event({event, Type, Event, _}, State) ->
+  log_event(Type, Event),
+  Preped   = [prepro(C) || C <- [{event, Type} | Event]],
+  Filtered = {struct, [C || C <- Preped, C =/= null]},
+  Json = mochijson2:encode(Filtered),
+
+  Channel    = get_channel(),
+  %rabbit_log:info("publishing ~p on rabbitevents ~p.~n", [list_to_binary(Json), Type]),
+  Properties   = #'P_basic'{content_type  = <<"application/json">>, 
+                            delivery_mode = 1},
+  BasicPublish = #'basic.publish'{exchange    = <<"rabbitevents">>},
+  Content      = #amqp_msg{props   = Properties,
+                           payload = list_to_binary(Json)},
+  amqp_channel:cast(Channel, BasicPublish, Content),
+  {ok, State}.
+
+%%------------------------------------------------------------------------------------------------------------
+log_event(Type, Event) ->
+  %rabbit_log:info("[events:~p] ~p.~n", [Type, Event]).
+  true.
+
 get_channel() ->
   case get(channel) of
     undefined ->
@@ -39,12 +66,17 @@ get_channel() ->
       put(channel, Channel),
       Channel;
     Channel ->
-      rabbit_log:info("[events] get_channel returning ~p.~n", [Channel]),
       Channel
   end.
 
-log_event(Type, Event) ->
-  rabbit_log:info("[events:~p] ~p.~n", [Type, Event]).
+%% Preprocessors to normalize event information before encoding as json. 
+%% Any preprocessor that returns null will force that element to be filtered
+%% out of the message.
+
+
+%% Prevent the raw Erlang connection information from being exposed
+prepro({connection, _}) ->
+  null;
 
 %% Convert the AMQP version tuple into a three element list
 prepro({protocol, {'Direct', Version}}) when is_tuple(Version) ->
@@ -61,9 +93,9 @@ prepro({client_properties, Props}) ->
   {client_properties, {struct, [prepro(P) || P <- Props]}};
 prepro({Key, table, Table}) when is_list(Table) ->
   {Key, {struct, [prepro(E) || E <- Table]}};
-prepro({Key, longstr, Value}) when is_binary(Key), is_binary(Value) ->
+prepro({Key, _Type, Value}) when is_binary(Key), is_binary(Value) ->
   {Key, Value};
-prepro({Key, bool, Value}) when is_binary(Key), is_atom(Value) ->
+prepro({Key, _Type, Value}) when is_binary(Key), is_atom(Value) ->
   {Key, Value};
 
 % TODO handle tuples with arbitrary even number contents; assume key/value pairs
@@ -71,10 +103,6 @@ prepro({name,{resource,R,exchange,E}}) ->
   {name, {struct, [{resource, R}, {exchange, E}] }};
 prepro({name,{resource,R,queue,Q}}) ->
   {name, {struct, [{resource, R}, {queue, Q}] }};
-
-%% Prevent the raw Erlang connection information from being exposed
-prepro({connection, _}) ->
-  null;
 
 %% Prevent the raw Erlang process information from being exposed
 prepro({Type, Pid}) when is_pid(Pid) ->
@@ -84,27 +112,3 @@ prepro({Type, Pid}) when is_pid(Pid) ->
 %% able to convert it.
 prepro(Other) ->
   Other.
-
-handle_event({event, Type, [{pid, Pid}|_Event], _}, _State) when Pid == self() ->
-  rabbit_log:info("[events:~p] caught my own event.~n", [Type]);
-
-%% Receive a proplist from the internal event stream, sanitize it and preprocess it for the 
-%% JSON encoder then expose it via the rabbitevents fanout.
-handle_event({event, Type, Event, _}, State) ->
-  rabbit_log:info("[~p events:~p] caught an event ~p in state ~p.~n", [self(), Type, Event, State]),
-  log_event(Type, Event),
-  Preped   = [prepro(C) || C <- [{event, Type} | Event]],
-  Filtered = {struct, [C || C <- Preped, C =/= null]},
-  Json = mochijson2:encode(Filtered),
-  rabbit_log:info(Json),
-
-  Channel    = get_channel(),
-  rabbit_log:info("publishing ~p on rabbitevents ~p.~n", [list_to_binary(Json), Type]),
-  Properties   = #'P_basic'{content_type  = <<"application/json">>, 
-                            delivery_mode = 1},
-  BasicPublish = #'basic.publish'{exchange    = <<"rabbitevents">>},
-  Content      = #amqp_msg{props   = Properties,
-                           payload = list_to_binary(Json)},
-  amqp_channel:cast(Channel, BasicPublish, Content),
-  {ok, State}.
-%%------------------------------------------------------------------------------------------------------------
