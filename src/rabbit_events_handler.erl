@@ -1,3 +1,4 @@
+%% @author Caleb Crane <rabbitevents@simulacre.org>
 -module(rabbit_events_handler).
 -behaviour(gen_event).
 -export([add_handler/0]).
@@ -13,6 +14,7 @@ init([]) ->
   [ ok=store_config(Key) || Key <- [host, username, password, virtual_host, exchange, debug] ],
   {ok, []}.
 
+%% Retrieves a configuration variable and stores it locally.
 store_config(Key) ->
   {ok, Value} = application:get_env(rabbitmq_events, Key),
   put(Key, Value),
@@ -42,7 +44,7 @@ handle_event({event, Type, [{pid, Pid}|_Event], _}, _State) when Pid == self() -
 %% Receive a proplist from the internal event stream, sanitize it and preprocess it for the 
 %% JSON encoder then expose it via the rabbitevents fanout.
 handle_event({event, Type, Event, _}, State) ->
-  log_event(Type, Event),
+  log("[events:~p] ~p.~n", [Type, Event]),
   Preped   = [prepro(C) || C <- [{event, Type} | Event]],
   Filtered = {struct, [C || C <- Preped, C =/= null]},
   Json = rabbit_events_enc:encode(Filtered),
@@ -58,6 +60,8 @@ handle_event({event, Type, Event, _}, State) ->
   {ok, State}.
 
 %%------------------------------------------------------------------------------------------------------------
+
+%% Logs debug information if the debug environment flag is set to true or not defined at all.
 log(Msg, Values) ->
   case get(debug) of
     undefined ->
@@ -67,10 +71,8 @@ log(Msg, Values) ->
     _ -> nothing
   end.
 
-log_event(Type, Event) ->
-  log("[events:~p] ~p.~n", [Type, Event]),
-  true.
-
+%% Sets up and stores a connection to RabbitMQ in order to publish events. If a connection 
+%% was previously set then that connection will be reused.
 get_channel() ->
   case get(channel) of
     undefined ->
@@ -89,10 +91,10 @@ get_channel() ->
       Channel
   end.
 
+
 %% Preprocessors to normalize event information before encoding as json. 
 %% Any preprocessor that returns null will force that element to be filtered
 %% out of the message.
-
 
 %% Prevent the raw Erlang connection information from being exposed
 prepro({connection, _}) ->
